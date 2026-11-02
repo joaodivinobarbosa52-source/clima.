@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clima da Fazenda</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f7d46">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--bg:#eef2ef;--ink:#16231b;--mut:#5b6b61;--card:#fff;--line:#d3dcd6;--rain:#1b6ca8;--soil:#7a5a3a;--ok:#2f7d46}
+@media(prefers-color-scheme:dark){:root{--bg:#121a15;--ink:#e6efe9;--mut:#93a699;--card:#1b261f;--line:#2c3a31;--rain:#5aaee6;--soil:#c9a27a;--ok:#5ec27a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;height:100dvh}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line)}
+header b{font-size:17px}
+.btn,button{background:var(--ok);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+button[hidden]{display:none}
+button.sec{background:transparent;color:var(--mut);border:1px solid var(--line)}
+button:focus-visible,.btn:focus-within,select:focus-visible,input:focus-visible{outline:2px solid var(--rain);outline-offset:2px}
+#map{flex:0 0 42%;min-height:200px}
+#panel{flex:1;overflow:auto;padding:12px 14px 20px;display:flex;flex-direction:column;gap:10px}
+select,input{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+label{font-size:13px;color:var(--mut);display:block}
+.leaflet-control-layers label{display:flex;align-items:center;gap:8px;color:#222;font-size:14px;margin:4px 0}.leaflet-control-layers input{width:auto;padding:0;margin:0}.leaflet-control-layers-list{padding:4px 6px}.nuvens{mix-blend-mode:screen}.loc-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:#fff;color:#222;font-size:18px;cursor:pointer;border-radius:4px;text-decoration:none}.loc-btn.on{background:#cfe9ff}
+#info{display:flex;gap:16px;flex-wrap:wrap}
+#info div{font-size:13px;color:var(--mut)}
+#info strong{display:block;font-size:20px;color:var(--ink)}
+.row{display:grid;grid-template-columns:62px 1fr 64px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.row.past{color:var(--mut)}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--rain)}
+.row small{display:block;color:var(--mut);font-size:12px}
+.row span:last-child{text-align:right;font-weight:600}
+.act{display:flex;gap:8px}
+.act button:first-child{flex:1}
+#msg{color:var(--mut)}
+.gauge{display:flex;gap:8px;margin-top:4px}.gauge input{flex:1;min-width:0}
+.note{font-size:12px;color:var(--mut);margin:0}
+#now{border-radius:10px;padding:10px 12px;background:var(--card);border:1px solid var(--line);font-size:14px}
+#now.wet{border-color:var(--rain)}#now.wet h3{color:var(--rain)}
+#now h3{margin:0 0 4px;font-size:15px;color:var(--ok)}
+#now p{margin:2px 0}#now small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
+.act.two button{flex:1}
+#rep,#notes{display:none}
+#alerta{background:#fdecea;color:#7a1c14;border:1px solid #e0a49e;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600}#alerta:empty{display:none}
+#hist{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}#hist summary{cursor:pointer;font-weight:600}
+body.prn #map{width:680px;max-width:none;height:300px;flex:none;min-height:0}
+@media print{
+ body{display:block;height:auto;background:#fff;color:#000}
+ header,#sel,#farm,.act,#inst,#msg,label,#gaugebox,#alerta,#hist,.alrt,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+ #map{display:block!important;width:680px;height:300px;flex:none;min-height:0;margin:8px 0}
+ #panel{overflow:visible;display:block;padding:0}
+ #rep,#notes{display:block}
+ #notes{border:1px solid #999;height:220px;padding:8px;margin-top:14px}
+ .row,#now{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header>
+  <b>Clima da Fazenda</b>
+  <button id="inst" class="sec" hidden>Instalar app</button>
+  <label class="btn">Importar talhões<input type="file" id="f" accept=".kml,.kmz,.zip,.json,.geojson" multiple hidden></label>
+</header>
+<div id="rep"></div>
+<div id="map"></div>
+<main id="panel">
+  <select id="sel" aria-label="Talhão"></select>
+  <select id="farm" aria-label="Pluviômetro deste talhão"></select>
+  <div id="info"></div>
+  <div id="alerta" role="alert"></div>
+  <div id="now"></div>
+  <div class="act two"><button id="rad" class="sec">Ver radar de nuvens</button><button id="pdf" class="sec">Relatório PDF</button></div>
+  <div id="days"></div>
+  <details id="hist"></details>
+  <p class="note">Chuva estimada pela mediana de 3 modelos (ECMWF, GFS e ICON). Em chuva localizada o modelo pode errar. Anote o pluviômetro para corrigir.</p>
+  <div id="gaugebox"><label for="gm">Chuva medida no pluviômetro (mm) — corrige a estimativa</label><div class="gauge"><input type="date" id="gd" aria-label="Data"><input id="gm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="mm"><button id="gs">Salvar</button></div></div>
+  <p id="msg"></p>
+  <div id="notes">Observações da visita:</div>
+  <div class="alrt"><label>Alerta de chuva forte (mm por dia; vale para hoje e os 2 dias seguintes)<div class="gauge"><input id="al" type="number" inputmode="decimal" min="0" step="1" placeholder="ex.: 20"><button id="alb" class="sec">Ativar</button></div></label></div>
+  <label>WhatsApp de destino (opcional, com DDI e DDD)
+    <input id="num" inputmode="tel" placeholder="5563999999999">
+  </label>
+  <div class="act"><button id="img">Enviar com imagem</button></div>
+  <div class="act">
+    <button id="send">Enviar resumo no WhatsApp</button>
+    <button id="del" class="sec">Excluir</button>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let fields = [], cur = null, layer = null, wx = null, radarL = null, satL = null, wxStale;
+try { fields = JSON.parse(localStorage.getItem('cf_fields') || '[]'); $('num').value = localStorage.getItem('cf_num') || ''; } catch (e) {}
+const save = () => { try { localStorage.setItem('cf_fields', JSON.stringify(fields)); } catch (e) {} };
+
+/* Mapa */
+const map = L.map('map').setView([-10.2, -48.3], 6);
+const base = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' }).addTo(map);
+const ctrl = L.control.layers(null, {}, { collapsed: true }).addTo(map);
+/* Minha localização */
+let me = null, meAcc = null;
+function goMe(zoom, cb) {
+  if (!navigator.geolocation) { alert('Localização indisponível neste aparelho.'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const ll = [pos.coords.latitude, pos.coords.longitude];
+    if (me) { me.setLatLng(ll); meAcc.setLatLng(ll).setRadius(pos.coords.accuracy); }
+    else { meAcc = L.circle(ll, { radius: pos.coords.accuracy, weight: 1, color: '#1b6ca8', fillOpacity: .12 }).addTo(map); me = L.circleMarker(ll, { radius: 7, weight: 2, color: '#fff', fillColor: '#1b6ca8', fillOpacity: 1 }).addTo(map); }
+    map.setView(ll, zoom);
+    if (cb) cb(ll);
+  }, () => alert('Não consegui obter a localização. Ative o GPS e permita o acesso ao local no navegador.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+}
+const LocCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd() {
+  const a = L.DomUtil.create('a', 'loc-btn leaflet-bar'); a.href = '#'; a.title = 'Minha localização'; a.setAttribute('role', 'button'); a.textContent = '📍';
+  L.DomEvent.disableClickPropagation(a);
+  L.DomEvent.on(a, 'click', e => { L.DomEvent.preventDefault(e); goMe(map.hasLayer(satL) ? 8 : 15); });
+  return a; } });
+new LocCtl().addTo(map);
+/* Nuvens: satélite GOES-East (NASA GIBS, infravermelho) — o satélite do RainViewer foi descontinuado em 2026 */
+const gibs = () => L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png?t=' + Math.floor(Date.now() / 600000), { opacity: .8, className: 'nuvens', maxNativeZoom: 6, maxZoom: 19, attribution: 'NASA GIBS / GOES-East' });
+satL = gibs();
+ctrl.addOverlay(satL, 'Nuvens (satélite GOES)');
+setInterval(() => { const on = map.hasLayer(satL); ctrl.removeLayer(satL); if (on) map.removeLayer(satL); satL = gibs(); ctrl.addOverlay(satL, 'Nuvens (satélite GOES)'); if (on) map.addLayer(satL); }, 600000);
+/* Radar de chuva (RainViewer): só mostra onde há radar meteorológico; zoom máx. 7 */
+fetch('https://api.rainviewer.com/public/weather-maps.json').then(r => r.json()).then(j => {
+  const p = j.radar.past[j.radar.past.length - 1].path;
+  radarL = L.tileLayer(j.host + p + '/256/{z}/{x}/{y}/2/1_1.png', { opacity: .7, maxNativeZoom: 7, maxZoom: 19 });
+  ctrl.addOverlay(radarL, 'Radar de chuva (onde houver cobertura)');
+}).catch(() => {});
+
+/* Importação */
+const fromKml = t => toGeoJSON.kml(new DOMParser().parseFromString(t, 'text/xml')).features;
+async function parse(file) {
+  const n = file.name.toLowerCase();
+  if (n.endsWith('.kmz')) {
+    const z = await JSZip.loadAsync(file);
+    const k = Object.keys(z.files).find(x => x.toLowerCase().endsWith('.kml'));
+    return fromKml(await z.files[k].async('string'));
+  }
+  if (n.endsWith('.kml')) return fromKml(await file.text());
+  if (n.endsWith('.zip')) return [].concat(await shp(await file.arrayBuffer())).flatMap(x => x.features);
+  const j = JSON.parse(await file.text());
+  return j.features || [j];
+}
+$('f').onchange = async e => {
+  let n = 0;
+  for (const file of e.target.files) {
+    try {
+      const base = file.name.replace(/\.[^.]+$/, '');
+      (await parse(file)).filter(f => f.geometry && /Polygon/.test(f.geometry.type)).forEach((f, i) => {
+        fields.push({ id: Date.now() + n, name: (f.properties && f.properties.name) || base + ' ' + (i + 1), geometry: f.geometry });
+        n++;
+      });
+    } catch (err) { $('msg').textContent = 'Não consegui ler ' + file.name + '. Use KML, KMZ, GeoJSON ou shapefile em .zip.'; }
+  }
+  e.target.value = '';
+  if (n) { save(); cur = fields[fields.length - 1].id; refresh(); }
+};
+
+/* Geometria */
+const rings = g => g.type === 'Polygon' ? [g.coordinates[0]] : g.coordinates.map(p => p[0]);
+const mm = a => a.reduce((r, v) => [Math.min(r[0], v), Math.max(r[1], v)], [1e9, -1e9]);
+function stats(g) {
+  const xs = [], ys = []; let area = 0;
+  rings(g).forEach(r => {
+    const kx = 111320 * Math.cos(r[0][1] * Math.PI / 180), ky = 110540; let s = 0;
+    r.forEach(p => { xs.push(p[0]); ys.push(p[1]); });
+    for (let i = 0; i < r.length - 1; i++) s += r[i][0] * kx * r[i + 1][1] * ky - r[i + 1][0] * kx * r[i][1] * ky;
+    area += Math.abs(s) / 2;
+  });
+  const [x0, x1] = mm(xs), [y0, y1] = mm(ys);
+  return { ha: area / 1e4, lat: (y0 + y1) / 2, lon: (x0 + x1) / 2 };
+}
+
+/* Tela */
+function refresh() {
+  $('sel').innerHTML = fields.map(f => `<option value="${f.id}" ${f.id === cur ? 'selected' : ''}>${f.name.replace(/</g, '&lt;')}</option>`).join('');
+  const f = fields.find(x => x.id === cur) || fields[0];
+  if (layer) { map.removeLayer(layer); layer = null; }
+  if (!f) {
+    $('info').innerHTML = ''; $('days').innerHTML = '';
+    $('msg').textContent = 'Importe o perímetro da fazenda (KML, KMZ, GeoJSON ou shapefile .zip) para ver chuva e previsão.';
+    return;
+  }
+  cur = f.id; $('msg').textContent = ''; fillFarmSel();
+  layer = L.geoJSON(f.geometry, { style: { color: '#ffd54a', weight: 2, fillOpacity: .1 } }).addTo(map);
+  map.fitBounds(layer.getBounds(), { maxZoom: 16 });
+  loadWx(f);
+}
+$('sel').onchange = e => { cur = +e.target.value; refresh(); };
+$('del').onclick = () => { if (cur && confirm('Excluir este talhão?')) { fields = fields.filter(f => f.id !== cur); cur = null; save(); refresh(); } };
+$('num').onchange = e => { try { localStorage.setItem('cf_num', e.target.value); } catch (x) {} };
+
+/* Pluviômetro Pro: leitura do Firestore (REST, só leitura).
+   Para incluir a Santa Rosa, copie uma linha de FARMS e troque id, nome e col
+   (e project/key se ela usar outro projeto Firebase). */
+const FB = { project: 'fazenda-sitio-novo', key: 'AIzaSyDHmAxPRs-fwn8K-QBoOYAi2auZJlVN4H4' };
+const FARMS = [
+  { id: 'u1', nome: 'Rio da Vida', col: 'chuvas_unidade1', nomeKey: 'fazenda1', ...FB },
+  { id: 'u2', nome: 'Bacabal', col: 'chuvas_unidade2', nomeKey: 'fazenda2', ...FB },
+  { id: 'sr', nome: 'Santa Rosa', col: 'chuvas_santa_rosa', nomeKey: 'fazenda3', ...FB }
+];
+let pl = {}, plSt = '', plT = 0;
+const fsUrl = (F, path) => `https://firestore.googleapis.com/v1/projects/${F.project}/databases/(default)/documents${path}key=${F.key}`;
+async function loadNomes() {
+  try {
+    const F = FARMS[0];
+    const j = await (await fetch(fsUrl(F, '/config/nomes_fazendas?'))).json();
+    FARMS.forEach(x => { const v = x.nomeKey && j.fields && j.fields[x.nomeKey]; if (v && v.stringValue) x.nome = v.stringValue; });
+    fillFarmSel();
+  } catch (e) {}
+}
+function fillFarmSel() {
+  const f = fields.find(x => x.id === cur);
+  $('farm').innerHTML = '<option value="">Pluviômetro: nenhum (só modelos)</option>' +
+    FARMS.map(x => `<option value="${x.id}" ${f && f.farm === x.id ? 'selected' : ''}>Pluviômetro: ${x.nome.replace(/</g, '&lt;')}</option>`).join('');
+}
+async function getPl(f) {
+  const F = FARMS.find(x => x.id === f.farm);
+  if (!F) { plSt = ''; return {}; }
+  const ck = 'cf_pl_' + F.id;
+  try {
+    const from = new Date(Date.now() - 35 * 864e5).toISOString().slice(0, 10);
+    const r = await fetch(fsUrl(F, ':runQuery?'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: F.col }], where: { fieldFilter: { field: { fieldPath: 'data' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: from } } } } }) });
+    const j = await r.json();
+    if (!Array.isArray(j)) throw 0;
+    const o = {};
+    j.forEach(x => { const d = x.document && x.document.fields; if (!d || !d.data) return;
+      const v = d.valor ? +(d.valor.doubleValue ?? d.valor.integerValue) : NaN;
+      if (!isNaN(v)) o[d.data.stringValue] = (o[d.data.stringValue] || 0) + v; });
+    try { localStorage.setItem(ck, JSON.stringify(o)); } catch (e) {}
+    plSt = 'ok'; plT = Date.now();
+    return o;
+  } catch (e) {
+    plSt = 'erro';
+    try { return JSON.parse(localStorage.getItem(ck)) || {}; } catch (x) { return {}; }
+  }
+}
+$('farm').onchange = e => { const f = fields.find(x => x.id === cur); if (!f) return; f.farm = e.target.value; save(); loadWx(f); };
+
+/* Clima */
+const dm = s => s.slice(8, 10) + '/' + s.slice(5, 7);
+const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+/* Clima: mediana de 3 modelos + pluviômetro manual */
+const MODELS = ['ecmwf_ifs025', 'gfs_seamless', 'icon_seamless'];
+const med = a => { a = a.filter(x => x != null).sort((x, y) => x - y); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+const nowHr = () => new Date(Date.now() + ((wx && wx.off) || 0) * 1000).toISOString().slice(0, 13);
+function merge(raw) {
+  const pick = (blk, k) => { const a = MODELS.map(m => blk[k + '_' + m]).filter(Array.isArray); return a.length ? a : (Array.isArray(blk[k]) ? [blk[k]] : []); };
+  const d = raw.daily, h = raw.hourly;
+  const dp = pick(d, 'precipitation_sum'), hp = pick(h, 'precipitation'), tx = pick(d, 'temperature_2m_max'), tn = pick(d, 'temperature_2m_min');
+  if (!dp.length || !hp.length) throw 0;
+  const day = d.time.map((_, i) => { const v = dp.map(a => a[i]).filter(x => x != null), m = med(v); return { m: m == null || m < 0.5 ? 0 : m, n: v.filter(x => x >= 1).length, N: v.length }; });
+  const out = {
+    off: raw.utc_offset_seconds || 0,
+    daily: { time: d.time, model_sum: day.map(x => x.m), precipitation_sum: [], src: [], cons: day.map(x => x.N ? x.n + '/' + x.N : '-'),
+      temperature_2m_max: d.time.map((_, i) => med(tx.map(a => a[i]))), temperature_2m_min: d.time.map((_, i) => med(tn.map(a => a[i]))) },
+    hourly: { time: h.time, precipitation: h.time.map((_, i) => med(hp.map(a => a[i]))), models: hp }
+  };
+  const k = h.time.findIndex(t => t.slice(0, 13) === new Date(Date.now() + out.off * 1000).toISOString().slice(0, 13));
+  out.current = { precipitation: k < 0 ? 0 : (out.hourly.precipitation[k] || 0) };
+  return out;
+}
+function gaugeMap() { try { return (JSON.parse(localStorage.getItem('cf_gauge') || '{}'))[cur] || {}; } catch (e) { return {}; } }
+function showWx(s, stale) {
+  wxStale = stale;
+  const d = wx.daily, g = gaugeMap();
+  d.precipitation_sum = d.model_sum.map((v, i) => g[d.time[i]] != null ? g[d.time[i]] : pl[d.time[i]] != null ? pl[d.time[i]] : v);
+  d.src = d.time.map(t => g[t] != null ? 'm' : pl[t] != null ? 'p' : 'e');
+  const p = d.precipitation_sum;
+  if (!$('gd').value) { $('gd').value = d.time[3]; $('gm').value = g[d.time[3]] ?? ''; }
+  $('info').innerHTML = `<div><strong>${s.ha.toFixed(1)} ha</strong>área</div><div><strong>${sum(p.slice(0, 3)).toFixed(1)} mm</strong>últimos 3 dias</div><div><strong>${sum(p.slice(3)).toFixed(1)} mm</strong>próximos 7 dias</div><div><strong>${(wx.current.precipitation || 0).toFixed(1)} mm</strong>agora (estim.)</div>`;
+  const max = Math.max(10, ...p.map(v => v || 0));
+  const lab = i => d.src[i] === 'm' ? 'medido' : d.src[i] === 'p' ? 'pluviômetro' : i < 3 ? 'estimado' : i === 3 ? 'hoje' : '';
+  $('days').innerHTML = d.time.map((t, i) => `<div class="row ${i < 3 ? 'past' : ''}"><span>${dm(t)}${lab(i) ? '<small>' + lab(i) + '</small>' : ''}</span><div class="bar"><i style="width:${(p[i] || 0) / max * 100}%"></i></div><span>${(p[i] || 0).toFixed(1)} mm${i >= 3 && d.src[i] === 'e' ? `<small>${d.cons[i]} mod.</small>` : ''}</span></div>`).join('');
+  const pn = plSt === 'erro' ? '<small style="display:block;color:#b3261e;padding:4px 0">⚠ Não consegui ler o pluviômetro (sem internet ou sem acesso). Usando dado salvo ou estimativa.</small>' : plSt === 'ok' ? `<small style="display:block;padding:4px 0">Pluviômetro lido às ${new Date(plT).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>` : '';
+  $('days').innerHTML += pn;
+  renderNow(stale);
+  checkAlert(); renderHist(); setTimeout(prepCard, 0);
+}
+async function loadWx(f) {
+  const s = stats(f.geometry); wx = null; pl = {};
+  $('days').innerHTML = '<p id="msg">Carregando previsão…</p>'; $('now').innerHTML = ''; $('gd').value = '';
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat.toFixed(4)}&longitude=${s.lon.toFixed(4)}&hourly=precipitation&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&models=${MODELS.join(',')}&past_days=3&forecast_days=7&timezone=auto`;
+    const raw = await (await fetch(u)).json();
+    if (!raw.daily) throw 0;
+    wx = merge(raw);
+    pl = await getPl(f);
+    try { localStorage.setItem('cf_wx2_' + f.id, JSON.stringify({ t: Date.now(), wx })); } catch (e) {}
+    showWx(s);
+  } catch (e) {
+    let c = null; try { c = JSON.parse(localStorage.getItem('cf_wx2_' + f.id)); } catch (x) {}
+    if (c && c.wx && c.wx.daily) { wx = c.wx; pl = await getPl(f); showWx(s, c.t); }
+    else { wx = null; $('days').innerHTML = '<p id="msg">Sem conexão com a previsão. Tente de novo.</p>'; }
+  }
+}
+
+/* Agora e próximas horas */
+function renderNow(stale) {
+  const h = wx.hourly, c = wx.current, el = $('now');
+  if (!h || !c) { el.className = ''; el.innerHTML = ''; return; }
+  const hr = nowHr();
+  const i = h.time.findIndex(t => t.slice(0, 13) >= hr);
+  const when = stale ? new Date(stale).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  const old = stale ? `<small>Sem internet: dados salvos de ${when}.</small>` : '';
+  if (i < 0) { el.className = ''; el.innerHTML = old || ''; return; }
+  const idx = [0, 1, 2, 3, 4, 5].map(k => i + k).filter(k => k < h.time.length);
+  const v = idx.map(k => h.precipitation[k] || 0), tot = sum(v);
+  const per = h.models.map(a => sum(idx.map(k => a[k] || 0))), N = per.length, kk = per.filter(x => x >= 1).length;
+  let last = -1; v.forEach((x, k) => { if (x >= 0.1) last = k; });
+  const wet = tot >= 1 && kk * 2 > N;
+  const upto = last >= 0 ? String((+h.time[idx[last]].slice(11, 13) + 1) % 24).padStart(2, '0') + 'h' : '';
+  el.className = wet ? 'wet' : '';
+  el.innerHTML = `<h3>${wet ? 'Possível chuva na área' : 'Sem chuva relevante prevista nas próximas 6 h'}</h3>` +
+    `<p>Modelos que preveem chuva (≥ 1 mm): ${kk} de ${N}</p>` +
+    (wet ? `<p>Previsão: ~${tot.toFixed(1)} mm até as ${upto}</p>` : '') +
+    old + '<small>Estimativa de modelos de previsão, não é chuva medida. Pode errar em chuva localizada.</small>';
+}
+
+/* Radar de nuvens */
+$('rad').onclick = () => {
+  const on = map.hasLayer(satL);
+  [satL, radarL].forEach(l => { if (l) { on ? map.removeLayer(l) : map.addLayer(l); } });
+  $('rad').textContent = on ? 'Ver radar de nuvens' : 'Ocultar radar';
+  if (on) { fitCur(); return; }
+  scrollTo(0, 0);
+  /* satélite e radar só têm detalhe regional: afasta o mapa e centraliza no talhão (ou na sua localização) */
+  const c = layer ? layer.getBounds().getCenter() : me ? me.getLatLng() : map.getCenter();
+  map.setView(c, 8);
+};
+
+/* Relatório PDF (imprimir → salvar como PDF) */
+function fillReport() {
+  const f = fields.find(x => x.id === cur); if (!f || !wx) return;
+  const s = stats(f.geometry);
+  $('rep').innerHTML = `<h2 style="margin:0">Relatório de visita — ${f.name.replace(/</g, '&lt;')}</h2><p>${new Date().toLocaleDateString('pt-BR')} · ${s.ha.toFixed(1)} ha · ${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}</p>`;
+}
+addEventListener('beforeprint', fillReport);
+$('gd').onchange = () => { $('gm').value = gaugeMap()[$('gd').value] ?? ''; };
+$('gs').onclick = () => {
+  const f = fields.find(x => x.id === cur), dt = $('gd').value;
+  if (!f || !wx || !dt) return;
+  const v = parseFloat(String($('gm').value).replace(',', '.'));
+  let all = {}; try { all = JSON.parse(localStorage.getItem('cf_gauge') || '{}'); } catch (e) {}
+  all[cur] = all[cur] || {};
+  if (isNaN(v) || v < 0) delete all[cur][dt]; else all[cur][dt] = v;
+  try { localStorage.setItem('cf_gauge', JSON.stringify(all)); } catch (e) {}
+  showWx(stats(f.geometry), wxStale);
+};
+function fitCur() { map.invalidateSize(); if (layer) map.fitBounds(layer.getBounds(), { maxZoom: 16, animate: false }); }
+$('pdf').onclick = () => {
+  if (!wx) return;
+  fillReport(); document.body.classList.add('prn'); fitCur();
+  let done = false; const go = () => { if (!done) { done = true; print(); } };
+  base.once('load', go); setTimeout(go, 1800);
+};
+addEventListener('afterprint', () => { document.body.classList.remove('prn'); fitCur(); });
+
+/* Resumo (texto do WhatsApp e da imagem) */
+const srcLab = x => x === 'm' ? 'anotado' : x === 'p' ? 'pluviômetro' : 'estimado';
+function summary(f) {
+  const s = stats(f.geometry), d = wx.daily, p = d.precipitation_sum;
+  let t = `*${f.name}* (${s.ha.toFixed(1)} ha)\n`;
+  t += `Chuva nos últimos 3 dias: ${sum(p.slice(0, 3)).toFixed(1)} mm\n`;
+  for (let i = 0; i < 3; i++) t += `  ${dm(d.time[i])}: ${(p[i] || 0).toFixed(1)} mm (${srcLab(d.src[i])})\n`;
+  t += `Hoje: ${(p[3] || 0).toFixed(1)} mm (${srcLab(d.src[3])}), ${d.temperature_2m_min[3]}° a ${d.temperature_2m_max[3]}°\n\n*Previsão*\n`;
+  for (let i = 4; i < d.time.length; i++) t += `${dm(d.time[i])}: ${(p[i] || 0).toFixed(1)} mm (${d.cons[i]} modelos)\n`;
+  t += `\n_Estimativa de modelos; pode errar. Valores medidos no pluviômetro quando informados._\nTotal 7 dias: ${sum(p.slice(3)).toFixed(1)} mm\nLocal: https://maps.google.com/?q=${s.lat.toFixed(5)},${s.lon.toFixed(5)}`;
+  return t;
+}
+function waUrl(t) {
+  let n = $('num').value.replace(/\D/g, '');
+  if (n.length === 10 || n.length === 11) n = '55' + n;
+  const q = encodeURIComponent(t);
+  return n ? `https://wa.me/${n}?text=${q}` : `https://api.whatsapp.com/send?text=${q}`;
+}
+$('send').onclick = () => {
+  const f = fields.find(x => x.id === cur);
+  if (!f || !wx) { $('msg').textContent = 'Aguarde a previsão carregar.'; return; }
+  location.href = waUrl(summary(f));
+};
+
+/* Imagem do talhão (satélite + contorno + resumo) para compartilhar */
+let card = { key: '', blob: null };
+const tx_ = (lon, z) => (lon + 180) / 360 * 2 ** z * 256;
+const ty_ = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z * 256; };
+const loadImg = u => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); i.src = u; });
+async function buildCard(f) {
+  const t = summary(f).replace(/[*_]/g, '').split('\n').filter(l => !l.startsWith('Local:'));
+  const W = 800, MH = 480, LH = 30, H = MH + 36 + t.length * LH;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+  const rs = rings(f.geometry), pts = rs.flat();
+  const [x0, x1] = mm(pts.map(p => p[0])), [y0, y1] = mm(pts.map(p => p[1]));
+  let z = 18;
+  while (z > 3 && (tx_(x1, z) - tx_(x0, z) > W * .7 || ty_(y0, z) - ty_(y1, z) > MH * .7)) z--;
+  const cx = (tx_(x0, z) + tx_(x1, z)) / 2, cy = (ty_(y0, z) + ty_(y1, z)) / 2, ox = cx - W / 2, oy = cy - MH / 2;
+  const jobs = [];
+  for (let a = Math.floor(ox / 256); a <= Math.floor((ox + W) / 256); a++)
+    for (let b = Math.floor(oy / 256); b <= Math.floor((oy + MH) / 256); b++)
+      jobs.push(loadImg(`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${b}/${a}`).then(im => ({ im, a, b })));
+  c.fillStyle = '#334'; c.fillRect(0, 0, W, MH);
+  (await Promise.all(jobs)).forEach(o => { if (o.im) c.drawImage(o.im, o.a * 256 - ox, o.b * 256 - oy); });
+  c.beginPath();
+  rs.forEach(r => { r.forEach((p, i) => { const X = tx_(p[0], z) - ox, Y = ty_(p[1], z) - oy; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); });
+  c.fillStyle = 'rgba(255,213,74,.18)'; c.fill(); c.strokeStyle = '#ffd54a'; c.lineWidth = 3; c.stroke();
+  c.fillStyle = '#16231b';
+  t.forEach((l, i) => { c.font = (i === 0 ? 'bold 24px' : '22px') + ' system-ui, sans-serif'; c.fillText(l, 20, MH + 42 + i * LH); });
+  return await new Promise(r => cv.toBlob(r, 'image/png'));
+}
+const cardKey = f => f.id + '|' + JSON.stringify(wx.daily.precipitation_sum) + wx.daily.src.join('');
+function prepCard() {
+  const f = fields.find(x => x.id === cur);
+  if (!f || !wx) return Promise.resolve();
+  const k = cardKey(f);
+  if (card.key === k && card.blob) return Promise.resolve();
+  if (card.busy && card.busyKey === k) return card.busy;
+  const busy = buildCard(f).then(b => { card = { key: k, blob: b }; }).catch(() => { card = { key: '', blob: null }; });
+  card.busy = busy; card.busyKey = k;
+  return busy;
+}
+$('img').onclick = async () => {
+  const f = fields.find(x => x.id === cur);
+  if (!f || !wx) { $('msg').textContent = 'Aguarde a previsão carregar.'; return; }
+  const k = cardKey(f), txt = summary(f);
+  if (!(card.key === k && card.blob)) {
+    $('img').textContent = 'Gerando imagem…';
+    await prepCard();
+    $('img').textContent = 'Enviar com imagem';
+    if (card.key === k && card.blob) { $('msg').textContent = 'Imagem pronta. Toque de novo para enviar.'; return; }
+    $('msg').textContent = 'Não consegui gerar a imagem (sem internet?). Enviando só o texto.';
+    location.href = waUrl(txt); return;
+  }
+  const file = new File([card.blob], 'chuva-' + f.name.replace(/\W+/g, '_') + '.png', { type: 'image/png' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: txt }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  $('msg').textContent = 'Imagem salva no aparelho. Anexe no WhatsApp.';
+};
+
+/* Alerta de chuva forte (avisa enquanto o app estiver aberto) */
+const alLim = () => { try { return +localStorage.getItem('cf_alert') || 0; } catch (e) { return 0; } };
+function notify(title, body, tag) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (navigator.serviceWorker) navigator.serviceWorker.ready.then(r => r.showNotification(title, { body, tag, icon: 'icon-192.png' })).catch(() => {});
+    else new Notification(title, { body, tag });
+  } catch (e) {}
+}
+function checkAlert() {
+  const el = $('alerta'), lim = alLim(), f = fields.find(x => x.id === cur);
+  el.textContent = '';
+  if (!lim || !f || !wx) return;
+  const d = wx.daily, p = d.precipitation_sum, hit = [];
+  for (let i = 3; i <= 5 && i < d.time.length; i++) {
+    const [n, N] = String(d.cons[i]).split('/').map(Number);
+    if ((p[i] || 0) >= lim && (d.src[i] !== 'e' || n * 2 > N)) hit.push(`${dm(d.time[i])}: ${p[i].toFixed(1)} mm`);
+  }
+  if (!hit.length) return;
+  const msg = `Chuva forte em ${f.name} (limite ${lim} mm): ${hit.join(' · ')}`;
+  el.textContent = '⚠ ' + msg;
+  let seen = {}; try { seen = JSON.parse(localStorage.getItem('cf_alert_seen') || '{}'); } catch (e) {}
+  if (Object.keys(seen).length > 60) seen = {};
+  const key = f.id + '|' + hit.join(',');
+  if (!seen[key]) { seen[key] = 1; try { localStorage.setItem('cf_alert_seen', JSON.stringify(seen)); } catch (e) {} notify('Clima da Fazenda', msg, key); }
+}
+$('al').value = alLim() || '';
+$('alb').onclick = async () => {
+  try { localStorage.setItem('cf_alert', String(+$('al').value || 0)); } catch (e) {}
+  if (alLim() && 'Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) {} }
+  if (wx) checkAlert();
+  $('msg').textContent = alLim() ? 'Alerta ativo para chuva acima de ' + alLim() + ' mm por dia. Avisa enquanto o app estiver aberto.' : 'Alerta desligado.';
+};
+
+/* Histórico da chuva medida (últimos 30 dias) */
+function renderHist() {
+  const el = $('hist'), td = wx.daily.time[3], m = Object.assign({}, pl, gaugeMap()), days = [];
+  for (let k = 29; k >= 0; k--) { const t = new Date(td + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() - k); days.push(t.toISOString().slice(0, 10)); }
+  const v = days.map(t => m[t]);
+  if (!v.some(x => x != null)) { el.innerHTML = '<summary>Chuva medida · últimos 30 dias</summary><p class="note">Sem leituras ainda. Escolha um pluviômetro ou anote a chuva.</p>'; return; }
+  const top = Math.max(10, ...v.map(x => x || 0)), tot = sum(v), mes = sum(days.map((t, i) => t.slice(0, 7) === td.slice(0, 7) ? (v[i] || 0) : 0));
+  const bars = v.map((x, i) => x ? `<rect x="${i * 10 + 1}" y="${(70 - x / top * 66).toFixed(1)}" width="8" height="${(x / top * 66).toFixed(1)}" style="fill:var(--rain)"><title>${dm(days[i])}: ${x.toFixed(1)} mm</title></rect>` : '').join('');
+  el.innerHTML = `<summary>Chuva medida · ${tot.toFixed(0)} mm em 30 dias, ${mes.toFixed(0)} mm no mês</summary><svg viewBox="0 0 300 86" width="100%" role="img" aria-label="Chuva medida por dia"><line x1="0" y1="70" x2="300" y2="70" style="stroke:var(--line)"/>${bars}<text x="0" y="83" font-size="9" style="fill:var(--mut)">${dm(days[0])}</text><text x="300" y="83" font-size="9" text-anchor="end" style="fill:var(--mut)">${dm(days[29])}</text><text x="300" y="8" font-size="9" text-anchor="end" style="fill:var(--mut)">máx. ${top.toFixed(0)} mm</text></svg><p class="note">Barras = pluviômetro ou chuva anotada. Dias sem leitura ficam em branco.</p>`;
+}
+
+refresh();
+loadNomes();
+
+/* Atualização automática do pluviômetro: a cada 2 min e ao voltar para o app */
+let syncing = false;
+async function syncPl() {
+  const f = fields.find(x => x.id === cur);
+  if (syncing || !f || !f.farm || !wx) return;
+  syncing = true;
+  try { const n = await getPl(f); if (f.id === cur) { pl = n; showWx(stats(f.geometry), wxStale); } } finally { syncing = false; }
+}
+setInterval(() => { if (!document.hidden) syncPl(); }, 120000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPl(); });
+addEventListener('focus', syncPl);
+
+/* PWA */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let ev = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); ev = e; $('inst').hidden = false; });
+$('inst').onclick = async () => { if (!ev) return; ev.prompt(); await ev.userChoice; ev = null; $('inst').hidden = true; };
+addEventListener('appinstalled', () => { $('inst').hidden = true; });
+</script>
+</body>
+</html>

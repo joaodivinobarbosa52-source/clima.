@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clima da Fazenda</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f7d46">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--bg:#eef2ef;--ink:#16231b;--mut:#5b6b61;--card:#fff;--line:#d3dcd6;--rain:#1b6ca8;--soil:#7a5a3a;--ok:#2f7d46}
+@media(prefers-color-scheme:dark){:root{--bg:#121a15;--ink:#e6efe9;--mut:#93a699;--card:#1b261f;--line:#2c3a31;--rain:#5aaee6;--soil:#c9a27a;--ok:#5ec27a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh;height:100dvh}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line)}
+header b{font-size:17px}
+.btn,button{background:var(--ok);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+button[hidden]{display:none}
+button.sec{background:transparent;color:var(--mut);border:1px solid var(--line)}
+button:focus-visible,.btn:focus-within,select:focus-visible,input:focus-visible{outline:2px solid var(--rain);outline-offset:2px}
+#map{flex:0 0 42%;min-height:200px}
+#panel{flex:1;overflow:auto;padding:12px 14px 20px;display:flex;flex-direction:column;gap:10px}
+select,input{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+label{font-size:13px;color:var(--mut);display:block}
+#info{display:flex;gap:16px;flex-wrap:wrap}
+#info div{font-size:13px;color:var(--mut)}
+#info strong{display:block;font-size:20px;color:var(--ink)}
+.row{display:grid;grid-template-columns:62px 1fr 64px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.row.past{color:var(--mut)}
+.bar{height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--rain)}
+.row small{display:block;color:var(--mut);font-size:12px}
+.row span:last-child{text-align:right;font-weight:600}
+.act{display:flex;gap:8px}
+.act button:first-child{flex:1}
+#msg{color:var(--mut)}
+.gauge{display:flex;gap:8px;margin-top:4px}.gauge input{flex:1;min-width:0}
+.note{font-size:12px;color:var(--mut);margin:0}
+#now{border-radius:10px;padding:10px 12px;background:var(--card);border:1px solid var(--line);font-size:14px}
+#now.wet{border-color:var(--rain)}#now.wet h3{color:var(--rain)}
+#now h3{margin:0 0 4px;font-size:15px;color:var(--ok)}
+#now p{margin:2px 0}#now small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
+.act.two button{flex:1}
+#rep,#notes{display:none}
+body.prn #map{width:680px;max-width:none;height:300px;flex:none;min-height:0}
+@media print{
+ body{display:block;height:auto;background:#fff;color:#000}
+ header,#sel,.act,#inst,#msg,label,#gaugebox,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+ #map{display:block!important;width:680px;height:300px;flex:none;min-height:0;margin:8px 0}
+ #panel{overflow:visible;display:block;padding:0}
+ #rep,#notes{display:block}
+ #notes{border:1px solid #999;height:220px;padding:8px;margin-top:14px}
+ .row,#now{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header>
+  <b>Clima da Fazenda</b>
+  <button id="inst" class="sec" hidden>Instalar app</button>
+  <label class="btn">Importar talhões<input type="file" id="f" accept=".kml,.kmz,.zip,.json,.geojson" multiple hidden></label>
+</header>
+<div id="rep"></div>
+<div id="map"></div>
+<main id="panel">
+  <select id="sel" aria-label="Talhão"></select>
+  <div id="info"></div>
+  <div id="now"></div>
+  <div class="act two"><button id="rad" class="sec">Ver radar de nuvens</button><button id="pdf" class="sec">Relatório PDF</button></div>
+  <div id="days"></div>
+  <p class="note">Chuva estimada pela mediana de 3 modelos (ECMWF, GFS e ICON). Em chuva localizada o modelo pode errar. Anote o pluviômetro para corrigir.</p>
+  <div id="gaugebox"><label for="gm">Chuva medida no pluviômetro (mm) — corrige a estimativa</label><div class="gauge"><input type="date" id="gd" aria-label="Data"><input id="gm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="mm"><button id="gs">Salvar</button></div></div>
+  <p id="msg"></p>
+  <div id="notes">Observações da visita:</div>
+  <label>WhatsApp de destino (opcional, com DDI e DDD)
+    <input id="num" inputmode="tel" placeholder="5563999999999">
+  </label>
+  <div class="act">
+    <button id="send">Enviar resumo no WhatsApp</button>
+    <button id="del" class="sec">Excluir</button>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let fields = [], cur = null, layer = null, wx = null, radarL = null, satL = null, wxStale;
+try { fields = JSON.parse(localStorage.getItem('cf_fields') || '[]'); $('num').value = localStorage.getItem('cf_num') || ''; } catch (e) {}
+const save = () => { try { localStorage.setItem('cf_fields', JSON.stringify(fields)); } catch (e) {} };
+
+/* Mapa */
+const map = L.map('map').setView([-10.2, -48.3], 6);
+const base = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' }).addTo(map);
+const ctrl = L.control.layers(null, {}, { collapsed: true }).addTo(map);
+fetch('https://api.rainviewer.com/public/weather-maps.json').then(r => r.json()).then(j => {
+  const p = j.radar.past[j.radar.past.length - 1].path;
+  radarL = L.tileLayer(j.host + p + '/256/{z}/{x}/{y}/2/1_1.png', { opacity: .7, maxNativeZoom: 7 });
+  ctrl.addOverlay(radarL, 'Radar de chuva');
+  const sp = j.satellite && j.satellite.infrared;
+  if (sp && sp.length) { satL = L.tileLayer(j.host + sp[sp.length - 1].path + '/256/{z}/{x}/{y}/0/0_0.png', { opacity: .6, maxNativeZoom: 6 }); ctrl.addOverlay(satL, 'Nuvens (satélite)'); }
+}).catch(() => {});
+
+/* Importação */
+const fromKml = t => toGeoJSON.kml(new DOMParser().parseFromString(t, 'text/xml')).features;
+async function parse(file) {
+  const n = file.name.toLowerCase();
+  if (n.endsWith('.kmz')) {
+    const z = await JSZip.loadAsync(file);
+    const k = Object.keys(z.files).find(x => x.toLowerCase().endsWith('.kml'));
+    return fromKml(await z.files[k].async('string'));
+  }
+  if (n.endsWith('.kml')) return fromKml(await file.text());
+  if (n.endsWith('.zip')) return [].concat(await shp(await file.arrayBuffer())).flatMap(x => x.features);
+  const j = JSON.parse(await file.text());
+  return j.features || [j];
+}
+$('f').onchange = async e => {
+  let n = 0;
+  for (const file of e.target.files) {
+    try {
+      const base = file.name.replace(/\.[^.]+$/, '');
+      (await parse(file)).filter(f => f.geometry && /Polygon/.test(f.geometry.type)).forEach((f, i) => {
+        fields.push({ id: Date.now() + n, name: (f.properties && f.properties.name) || base + ' ' + (i + 1), geometry: f.geometry });
+        n++;
+      });
+    } catch (err) { $('msg').textContent = 'Não consegui ler ' + file.name + '. Use KML, KMZ, GeoJSON ou shapefile em .zip.'; }
+  }
+  e.target.value = '';
+  if (n) { save(); cur = fields[fields.length - 1].id; refresh(); }
+};
+
+/* Geometria */
+const rings = g => g.type === 'Polygon' ? [g.coordinates[0]] : g.coordinates.map(p => p[0]);
+const mm = a => a.reduce((r, v) => [Math.min(r[0], v), Math.max(r[1], v)], [1e9, -1e9]);
+function stats(g) {
+  const xs = [], ys = []; let area = 0;
+  rings(g).forEach(r => {
+    const kx = 111320 * Math.cos(r[0][1] * Math.PI / 180), ky = 110540; let s = 0;
+    r.forEach(p => { xs.push(p[0]); ys.push(p[1]); });
+    for (let i = 0; i < r.length - 1; i++) s += r[i][0] * kx * r[i + 1][1] * ky - r[i + 1][0] * kx * r[i][1] * ky;
+    area += Math.abs(s) / 2;
+  });
+  const [x0, x1] = mm(xs), [y0, y1] = mm(ys);
+  return { ha: area / 1e4, lat: (y0 + y1) / 2, lon: (x0 + x1) / 2 };
+}
+
+/* Tela */
+function refresh() {
+  $('sel').innerHTML = fields.map(f => `<option value="${f.id}" ${f.id === cur ? 'selected' : ''}>${f.name.replace(/</g, '&lt;')}</option>`).join('');
+  const f = fields.find(x => x.id === cur) || fields[0];
+  if (layer) { map.removeLayer(layer); layer = null; }
+  if (!f) {
+    $('info').innerHTML = ''; $('days').innerHTML = '';
+    $('msg').textContent = 'Importe o perímetro da fazenda (KML, KMZ, GeoJSON ou shapefile .zip) para ver chuva e previsão.';
+    return;
+  }
+  cur = f.id; $('msg').textContent = '';
+  layer = L.geoJSON(f.geometry, { style: { color: '#ffd54a', weight: 2, fillOpacity: .1 } }).addTo(map);
+  map.fitBounds(layer.getBounds(), { maxZoom: 16 });
+  loadWx(f);
+}
+$('sel').onchange = e => { cur = +e.target.value; refresh(); };
+$('del').onclick = () => { if (cur && confirm('Excluir este talhão?')) { fields = fields.filter(f => f.id !== cur); cur = null; save(); refresh(); } };
+$('num').onchange = e => { try { localStorage.setItem('cf_num', e.target.value); } catch (x) {} };
+
+/* Clima */
+const dm = s => s.slice(8, 10) + '/' + s.slice(5, 7);
+const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+/* Clima: mediana de 3 modelos + pluviômetro manual */
+const MODELS = ['ecmwf_ifs025', 'gfs_seamless', 'icon_seamless'];
+const med = a => { a = a.filter(x => x != null).sort((x, y) => x - y); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+const nowHr = () => new Date(Date.now() + ((wx && wx.off) || 0) * 1000).toISOString().slice(0, 13);
+function merge(raw) {
+  const pick = (blk, k) => { const a = MODELS.map(m => blk[k + '_' + m]).filter(Array.isArray); return a.length ? a : (Array.isArray(blk[k]) ? [blk[k]] : []); };
+  const d = raw.daily, h = raw.hourly;
+  const dp = pick(d, 'precipitation_sum'), hp = pick(h, 'precipitation'), tx = pick(d, 'temperature_2m_max'), tn = pick(d, 'temperature_2m_min');
+  if (!dp.length || !hp.length) throw 0;
+  const day = d.time.map((_, i) => { const v = dp.map(a => a[i]).filter(x => x != null), m = med(v); return { m: m == null || m < 0.5 ? 0 : m, n: v.filter(x => x >= 1).length, N: v.length }; });
+  const out = {
+    off: raw.utc_offset_seconds || 0,
+    daily: { time: d.time, model_sum: day.map(x => x.m), precipitation_sum: [], src: [], cons: day.map(x => x.N ? x.n + '/' + x.N : '-'),
+      temperature_2m_max: d.time.map((_, i) => med(tx.map(a => a[i]))), temperature_2m_min: d.time.map((_, i) => med(tn.map(a => a[i]))) },
+    hourly: { time: h.time, precipitation: h.time.map((_, i) => med(hp.map(a => a[i]))), models: hp }
+  };
+  const k = h.time.findIndex(t => t.slice(0, 13) === new Date(Date.now() + out.off * 1000).toISOString().slice(0, 13));
+  out.current = { precipitation: k < 0 ? 0 : (out.hourly.precipitation[k] || 0) };
+  return out;
+}
+function gaugeMap() { try { return (JSON.parse(localStorage.getItem('cf_gauge') || '{}'))[cur] || {}; } catch (e) { return {}; } }
+function showWx(s, stale) {
+  wxStale = stale;
+  const d = wx.daily, g = gaugeMap();
+  d.precipitation_sum = d.model_sum.map((v, i) => g[d.time[i]] != null ? g[d.time[i]] : v);
+  d.src = d.time.map(t => g[t] != null ? 'm' : 'e');
+  const p = d.precipitation_sum;
+  if (!$('gd').value) { $('gd').value = d.time[3]; $('gm').value = g[d.time[3]] ?? ''; }
+  $('info').innerHTML = `<div><strong>${s.ha.toFixed(1)} ha</strong>área</div><div><strong>${sum(p.slice(0, 3)).toFixed(1)} mm</strong>últimos 3 dias</div><div><strong>${sum(p.slice(3)).toFixed(1)} mm</strong>próximos 7 dias</div><div><strong>${(wx.current.precipitation || 0).toFixed(1)} mm</strong>agora (estim.)</div>`;
+  const max = Math.max(10, ...p.map(v => v || 0));
+  const lab = i => d.src[i] === 'm' ? 'medido' : i < 3 ? 'estimado' : i === 3 ? 'hoje' : '';
+  $('days').innerHTML = d.time.map((t, i) => `<div class="row ${i < 3 ? 'past' : ''}"><span>${dm(t)}${lab(i) ? '<small>' + lab(i) + '</small>' : ''}</span><div class="bar"><i style="width:${(p[i] || 0) / max * 100}%"></i></div><span>${(p[i] || 0).toFixed(1)} mm${i >= 3 && d.src[i] !== 'm' ? `<small>${d.cons[i]} mod.</small>` : ''}</span></div>`).join('');
+  renderNow(stale);
+}
+async function loadWx(f) {
+  const s = stats(f.geometry); wx = null;
+  $('days').innerHTML = '<p id="msg">Carregando previsão…</p>'; $('now').innerHTML = ''; $('gd').value = '';
+  try {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat.toFixed(4)}&longitude=${s.lon.toFixed(4)}&hourly=precipitation&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&models=${MODELS.join(',')}&past_days=3&forecast_days=7&timezone=auto`;
+    const raw = await (await fetch(u)).json();
+    if (!raw.daily) throw 0;
+    wx = merge(raw);
+    try { localStorage.setItem('cf_wx2_' + f.id, JSON.stringify({ t: Date.now(), wx })); } catch (e) {}
+    showWx(s);
+  } catch (e) {
+    let c = null; try { c = JSON.parse(localStorage.getItem('cf_wx2_' + f.id)); } catch (x) {}
+    if (c && c.wx && c.wx.daily) { wx = c.wx; showWx(s, c.t); }
+    else { wx = null; $('days').innerHTML = '<p id="msg">Sem conexão com a previsão. Tente de novo.</p>'; }
+  }
+}
+
+/* Agora e próximas horas */
+function renderNow(stale) {
+  const h = wx.hourly, c = wx.current, el = $('now');
+  if (!h || !c) { el.className = ''; el.innerHTML = ''; return; }
+  const hr = nowHr();
+  const i = h.time.findIndex(t => t.slice(0, 13) >= hr);
+  const when = stale ? new Date(stale).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  const old = stale ? `<small>Sem internet: dados salvos de ${when}.</small>` : '';
+  if (i < 0) { el.className = ''; el.innerHTML = old || ''; return; }
+  const idx = [0, 1, 2, 3, 4, 5].map(k => i + k).filter(k => k < h.time.length);
+  const v = idx.map(k => h.precipitation[k] || 0), tot = sum(v);
+  const per = h.models.map(a => sum(idx.map(k => a[k] || 0))), N = per.length, kk = per.filter(x => x >= 1).length;
+  let last = -1; v.forEach((x, k) => { if (x >= 0.1) last = k; });
+  const wet = tot >= 1 && kk * 2 > N;
+  const upto = last >= 0 ? String((+h.time[idx[last]].slice(11, 13) + 1) % 24).padStart(2, '0') + 'h' : '';
+  el.className = wet ? 'wet' : '';
+  el.innerHTML = `<h3>${wet ? 'Possível chuva na área' : 'Sem chuva relevante prevista nas próximas 6 h'}</h3>` +
+    `<p>Modelos que preveem chuva (≥ 1 mm): ${kk} de ${N}</p>` +
+    (wet ? `<p>Previsão: ~${tot.toFixed(1)} mm até as ${upto}</p>` : '') +
+    old + '<small>Estimativa de modelos de previsão, não é chuva medida. Pode errar em chuva localizada.</small>';
+}
+
+/* Radar de nuvens */
+$('rad').onclick = () => {
+  if (!radarL) { $('rad').textContent = 'Radar indisponível'; return; }
+  const on = map.hasLayer(radarL);
+  [satL, radarL].forEach(l => { if (l) { on ? map.removeLayer(l) : map.addLayer(l); } });
+  $('rad').textContent = on ? 'Ver radar de nuvens' : 'Ocultar radar';
+  if (!on) scrollTo(0, 0);
+};
+
+/* Relatório PDF (imprimir → salvar como PDF) */
+function fillReport() {
+  const f = fields.find(x => x.id === cur); if (!f || !wx) return;
+  const s = stats(f.geometry);
+  $('rep').innerHTML = `<h2 style="margin:0">Relatório de visita — ${f.name.replace(/</g, '&lt;')}</h2><p>${new Date().toLocaleDateString('pt-BR')} · ${s.ha.toFixed(1)} ha · ${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}</p>`;
+}
+addEventListener('beforeprint', fillReport);
+$('gd').onchange = () => { $('gm').value = gaugeMap()[$('gd').value] ?? ''; };
+$('gs').onclick = () => {
+  const f = fields.find(x => x.id === cur), dt = $('gd').value;
+  if (!f || !wx || !dt) return;
+  const v = parseFloat(String($('gm').value).replace(',', '.'));
+  let all = {}; try { all = JSON.parse(localStorage.getItem('cf_gauge') || '{}'); } catch (e) {}
+  all[cur] = all[cur] || {};
+  if (isNaN(v) || v < 0) delete all[cur][dt]; else all[cur][dt] = v;
+  try { localStorage.setItem('cf_gauge', JSON.stringify(all)); } catch (e) {}
+  showWx(stats(f.geometry), wxStale);
+};
+function fitCur() { map.invalidateSize(); if (layer) map.fitBounds(layer.getBounds(), { maxZoom: 16, animate: false }); }
+$('pdf').onclick = () => {
+  if (!wx) return;
+  fillReport(); document.body.classList.add('prn'); fitCur();
+  let done = false; const go = () => { if (!done) { done = true; print(); } };
+  base.once('load', go); setTimeout(go, 1800);
+};
+addEventListener('afterprint', () => { document.body.classList.remove('prn'); fitCur(); });
+
+/* WhatsApp */
+$('send').onclick = () => {
+  const f = fields.find(x => x.id === cur);
+  if (!f || !wx) { $('msg').textContent = 'Aguarde a previsão carregar.'; return; }
+  const s = stats(f.geometry), d = wx.daily, p = d.precipitation_sum;
+  let t = `*${f.name}* (${s.ha.toFixed(1)} ha)\n`;
+  t += `Chuva nos últimos 3 dias: ${sum(p.slice(0, 3)).toFixed(1)} mm\n`;
+  t += `Hoje: ${(p[3] || 0).toFixed(1)} mm, ${d.temperature_2m_min[3]}° a ${d.temperature_2m_max[3]}°\n\n*Previsão*\n`;
+  for (let i = 4; i < d.time.length; i++) t += `${dm(d.time[i])}: ${(p[i] || 0).toFixed(1)} mm (${d.cons[i]} modelos)\n`;
+  t += `\n_Estimativa de modelos; pode errar. Valores medidos no pluviômetro quando informados._\nTotal 7 dias: ${sum(p.slice(3)).toFixed(1)} mm\nLocal: https://maps.google.com/?q=${s.lat.toFixed(5)},${s.lon.toFixed(5)}`;
+  const n = $('num').value.replace(/\D/g, '');
+  window.open(`https://wa.me/${n}?text=${encodeURIComponent(t)}`, '_blank');
+};
+
+refresh();
+
+/* PWA */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let ev = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); ev = e; $('inst').hidden = false; });
+$('inst').onclick = async () => { if (!ev) return; ev.prompt(); await ev.userChoice; ev = null; $('inst').hidden = true; };
+addEventListener('appinstalled', () => { $('inst').hidden = true; });
+</script>
+</body>
+</html>
